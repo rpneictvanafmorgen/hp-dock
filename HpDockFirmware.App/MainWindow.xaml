@@ -1,0 +1,272 @@
+<Window x:Class="HpDockFirmware.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="HP Dock Firmware Utility"
+        Width="1180"
+        Height="760"
+        MinWidth="980"
+        MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBackgroundBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Style="{StaticResource PanelBorderStyle}"
+                Margin="0,0,0,14"
+                Background="#FF214E4A"
+                BorderThickness="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock FontSize="28"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               Text="HP Dock Firmware Utility" />
+                    <TextBlock Margin="0,8,0,0"
+                               FontSize="14"
+                               Foreground="#FFE5F0EE"
+                               Text="Detect a connected HP dock, match it to a local firmware package definition, and launch HP's official updater." />
+                </StackPanel>
+
+                <Border Grid.Column="1"
+                        Background="#1FFFFFFF"
+                        CornerRadius="16"
+                        Padding="16,10"
+                        VerticalAlignment="Top">
+                    <StackPanel>
+                        <TextBlock Foreground="#FFD4E6E3" Text="App Version" />
+                        <TextBlock FontWeight="SemiBold"
+                                   FontSize="18"
+                                   Foreground="White"
+                                   Text="{Binding AppVersion}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.9*" />
+                <ColumnDefinition Width="1.15*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="Detected Docks" />
+                            <TextBlock Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="Catalog refresh runs automatically on startup when the local HP catalog is missing or stale. Use Refresh to rescan connected hardware." />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Width="120"
+                                    Height="42"
+                                    VerticalAlignment="Top"
+                                    Margin="0,0,10,0"
+                                    Command="{Binding ExportDiagnosticsCommand}"
+                                    Background="{StaticResource PrimaryAccentBrush}"
+                                    BorderBrush="{StaticResource PrimaryAccentBrush}"
+                                    Content="Diagnostics" />
+                            <Button Width="120"
+                                    Height="42"
+                                    VerticalAlignment="Top"
+                                    Margin="0"
+                                    Command="{Binding RefreshCommand}"
+                                    Content="Refresh" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2.2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="1.3*" />
+                        </Grid.RowDefinitions>
+
+                        <DataGrid Grid.Row="0"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  HeadersVisibility="Column"
+                                  IsReadOnly="True"
+                                  ItemsSource="{Binding Docks}"
+                                  SelectedItem="{Binding SelectedDock}"
+                                  GridLinesVisibility="Horizontal"
+                                  BorderThickness="0"
+                                  RowHeaderWidth="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Model" Binding="{Binding DisplayName}" Width="2*" />
+                                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
+                                <DataGridTextColumn Header="Firmware" Binding="{Binding FirmwareVersion}" Width="*" />
+                                <DataGridTextColumn Header="Product ID" Binding="{Binding ProductId}" Width="*" />
+                                <DataGridTextColumn Header="Serial" Binding="{Binding SerialNumber}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,10,0,6"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding DiagnosticsSummary}" />
+
+                        <DataGrid Grid.Row="2"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  HeadersVisibility="Column"
+                                  IsReadOnly="True"
+                                  ItemsSource="{Binding DiagnosticCandidates}"
+                                  GridLinesVisibility="Horizontal"
+                                  BorderThickness="0"
+                                  RowHeaderWidth="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Candidate" Binding="{Binding Name}" Width="2*" />
+                                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
+                                <DataGridTextColumn Header="Class" Binding="{Binding DeviceClass}" Width="*" />
+                                <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="2*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+
+                    <Border Grid.Row="2"
+                            Margin="0,14,0,0"
+                            Padding="12"
+                            CornerRadius="14"
+                            Background="#FFF7F0E7">
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="If nothing is detected, connect the dock directly to the host, then refresh. Product-ID matching still depends on the dock exposing stable hardware information." />
+                            <TextBlock Margin="0,8,0,0"
+                                       Foreground="#FF8A4D24"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding DetectionAdvisory}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Margin="12,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" FontSize="20" FontWeight="SemiBold" Text="Recommended Package" />
+
+                    <TextBlock Grid.Row="1" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Package" />
+                    <TextBlock Grid.Row="2" FontSize="18" FontWeight="SemiBold" Text="{Binding RecommendedPackageName}" TextWrapping="Wrap" />
+
+                    <UniformGrid Grid.Row="3" Margin="0,10,0,0" Columns="2">
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Foreground="{StaticResource MutedBrush}" Text="Catalog Version" />
+                            <TextBlock Text="{Binding RecommendedPackageVersion}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource MutedBrush}" Text="Installer Arguments" />
+                            <TextBlock Text="{Binding InstallerArguments}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <TextBlock Grid.Row="4" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Notes" />
+                    <TextBlock Grid.Row="5" Text="{Binding RecommendedPackageNotes}" TextWrapping="Wrap" />
+
+                    <TextBlock Grid.Row="6" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="HP Download URL" />
+                    <TextBlock Grid.Row="7" Text="{Binding DownloadUrl}" TextWrapping="Wrap" />
+
+                    <TextBlock Grid.Row="8" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Catalog Source" />
+                    <TextBlock Grid.Row="9" Text="{Binding CatalogSummary}" TextWrapping="Wrap" />
+
+                    <Border Grid.Row="10"
+                            Margin="0,14,0,0"
+                            Padding="14"
+                            CornerRadius="14"
+                            Background="#FFF8F2EA"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="Install" />
+
+                            <TextBlock Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Installer Path" />
+                            <TextBox Text="{Binding InstallerPath, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="#FFF7F4EF"
+                                     BorderThickness="1"
+                                     BorderBrush="{StaticResource BorderBrush}" />
+
+                            <UniformGrid Margin="0,12,0,0" Columns="2">
+                                <Button Margin="0,0,8,0"
+                                        Command="{Binding BrowseInstallerCommand}"
+                                        Background="{StaticResource PrimaryAccentBrush}"
+                                        BorderBrush="{StaticResource PrimaryAccentBrush}"
+                                        Content="Browse..." />
+                                <Button Margin="8,0,0,0"
+                                        Command="{Binding InstallCommand}"
+                                        Content="Install Firmware" />
+                            </UniformGrid>
+
+                            <TextBlock Margin="0,12,0,0"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="The app launches the selected HP updater and stores stdout/stderr in a log file under LocalAppData." />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Margin="0,14,0,0"
+                CornerRadius="16"
+                Padding="18,12"
+                Background="#FFEDE4D8">
+            <DockPanel>
+                <Button DockPanel.Dock="Right"
+                        Width="150"
+                        Margin="12,0,0,0"
+                        Command="{Binding OpenLogDirectoryCommand}"
+                        Background="#FF7A5A43"
+                        BorderBrush="#FF7A5A43"
+                        Content="Open Logs" />
+                <TextBlock VerticalAlignment="Center"
+                           FontWeight="SemiBold"
+                           Text="{Binding StatusMessage}" />
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

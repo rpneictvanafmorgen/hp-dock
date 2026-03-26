@@ -1,0 +1,28 @@
+{
+  "packages": [
+    {
+      "id": "hp-thunderbolt-dock-g4",
+      "dockModel": "HP Thunderbolt Dock G4",
+      "productId": "0488",
+      "detectPattern": "Thunderbolt Dock G4",
+      "version": "Keep in sync with the HP SoftPaq you stage locally",
+      "packageDisplayName": "HP Thunderbolt Dock G4 Firmware",
+      "installerFileName": "HPFirmwareInstaller.exe",
+      "installerArguments": "",
+      "downloadUrl": "https://support.hp.com/us-en/drivers/hp-thunderbolt-dock-g4",
+      "notes": "Stage HP's official package locally, then point the app at HPFirmwareInstaller.exe from that package."
+    },
+    {
+      "id": "hp-usb-c-dock-g5",
+      "dockModel": "HP USB-C Dock G5",
+      "productId": "484A",
+      "detectPattern": "USB-C Dock G5",
+      "version": "Keep in sync with the HP SoftPaq you stage locally",
+      "packageDisplayName": "HP USB-C Dock G5 Firmware",
+      "installerFileName": "HPFirmwareInstaller.exe",
+      "installerArguments": "",
+      "downloadUrl": "https://support.hp.com/us-en/drivers/hp-usb-c-dock-g5",
+      "notes": "Use HP's package for your exact dock revision. Adjust the catalog entry if your dock reports a different Product ID."
+    }
+  ]
+}

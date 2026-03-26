@@ -1,0 +1,40 @@
+{
+  "sources": [
+    {
+      "id": "hp-usb-c-dock-g5",
+      "dockModel": "HP USB-C Dock G5",
+      "productId": "484A",
+      "detectPattern": "USB-C Dock G5",
+      "sourceUrl": "https://support.hp.com/us-en/drivers/hp-usb-c-dock-g5/model/27767206",
+      "packageDisplayName": "HP USB-C Dock G5 Firmware",
+      "installerFileName": "HPFirmwareInstaller.exe",
+      "installerArguments": "",
+      "sourceHint": "firmware",
+      "notes": "HP support product page for the G5 dock."
+    },
+    {
+      "id": "hp-thunderbolt-dock-g4",
+      "dockModel": "HP Thunderbolt Dock G4",
+      "productId": "0488",
+      "detectPattern": "Thunderbolt Dock G4",
+      "sourceUrl": "https://support.hp.com/us-en/drivers/hp-thunderbolt-dock-120w-g4/model/2101085539",
+      "packageDisplayName": "HP Thunderbolt Dock G4 Firmware",
+      "installerFileName": "HPFirmwareInstaller.exe",
+      "installerArguments": "",
+      "sourceHint": "firmware",
+      "notes": "HP support product page for the Thunderbolt Dock G4."
+    },
+    {
+      "id": "hp-usb-c-a-universal-dock-g2",
+      "dockModel": "HP USB-C/A Universal Dock G2",
+      "productId": "0000",
+      "detectPattern": "Universal Dock G2",
+      "sourceUrl": "https://support.hp.com/us-en/drivers/hp-usb-c-a-universal-dock-g2/model/27767209",
+      "packageDisplayName": "HP USB-C/A Universal Dock G2 Firmware",
+      "installerFileName": "HPFirmwareInstaller.exe",
+      "installerArguments": "",
+      "sourceHint": "firmware",
+      "notes": "HP support product page for the USB-C/A Universal Dock G2."
+    }
+  ]
+}
