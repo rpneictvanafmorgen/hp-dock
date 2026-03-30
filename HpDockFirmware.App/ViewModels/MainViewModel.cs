@@ -26,8 +26,10 @@ public sealed class MainViewModel : ObservableObject
     private DockDetectionSnapshot _lastSnapshot = new();
     private DockDeviceInfo? _selectedDock;
     private FirmwarePackageInfo? _recommendedPackage;
+    private FirmwarePackageInfo? _selectedManualPackage;
     private string? _installerPath;
     private string _statusMessage = "Ready.";
+    private string? _postInstallVerificationSummary;
     private bool _isBusy;
 
     public MainViewModel(
@@ -51,17 +53,20 @@ public sealed class MainViewModel : ObservableObject
         ExportDiagnosticsCommand = new AsyncRelayCommand(ExportDiagnosticsAsync, () => !IsBusy);
         DownloadPackageCommand = new AsyncRelayCommand(DownloadPackageAsync, CanDownloadPackage);
         BrowseInstallerCommand = new RelayCommand(BrowseInstaller, () => !IsBusy);
+        ClearManualSelectionCommand = new RelayCommand(ClearManualSelection, () => !IsBusy && SelectedManualPackage is not null);
         InstallCommand = new AsyncRelayCommand(InstallAsync, CanInstall);
         OpenLogDirectoryCommand = new RelayCommand(OpenLogDirectory);
     }
 
     public ObservableCollection<DockDeviceInfo> Docks { get; } = [];
     public ObservableCollection<DockDetectionCandidate> DiagnosticCandidates { get; } = [];
+    public ObservableCollection<FirmwarePackageInfo> ManualPackageOptions { get; } = [];
 
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand ExportDiagnosticsCommand { get; }
     public AsyncRelayCommand DownloadPackageCommand { get; }
     public RelayCommand BrowseInstallerCommand { get; }
+    public RelayCommand ClearManualSelectionCommand { get; }
     public AsyncRelayCommand InstallCommand { get; }
     public RelayCommand OpenLogDirectoryCommand { get; }
 
@@ -72,15 +77,27 @@ public sealed class MainViewModel : ObservableObject
         {
             if (SetProperty(ref _selectedDock, value))
             {
-                RecommendedPackage = _catalogService.MatchPackage(value, _catalog);
-                if (RecommendedPackage is not null && string.IsNullOrWhiteSpace(InstallerPath))
-                {
-                    AutoFillInstallerPath();
-                }
-
+                SyncRecommendedPackage();
                 RaisePropertyChanged(nameof(CurrentFirmwareVersion));
+                RaisePropertyChanged(nameof(UpdateStatus));
+                RaisePropertyChanged(nameof(UpdateStatusDetail));
                 RaisePropertyChanged(nameof(FirmwareVersionSummary));
                 RaisePropertyChanged(nameof(InstallHelpText));
+            }
+        }
+    }
+
+    public FirmwarePackageInfo? SelectedManualPackage
+    {
+        get => _selectedManualPackage;
+        set
+        {
+            if (SetProperty(ref _selectedManualPackage, value))
+            {
+                SyncRecommendedPackage();
+                RaisePropertyChanged(nameof(IsManualSelectionActive));
+                RaisePropertyChanged(nameof(ManualSelectionStatus));
+                NotifyCommands();
             }
         }
     }
@@ -98,6 +115,8 @@ public sealed class MainViewModel : ObservableObject
                 RaisePropertyChanged(nameof(RecommendedPackageNotes));
                 RaisePropertyChanged(nameof(DownloadUrl));
                 RaisePropertyChanged(nameof(InstallerArguments));
+                RaisePropertyChanged(nameof(UpdateStatus));
+                RaisePropertyChanged(nameof(UpdateStatusDetail));
                 RaisePropertyChanged(nameof(FirmwareVersionSummary));
                 RaisePropertyChanged(nameof(InstallHelpText));
                 NotifyCommands();
@@ -123,6 +142,12 @@ public sealed class MainViewModel : ObservableObject
     public string RecommendedPackageVersion => RecommendedPackage?.Version ?? "Unknown";
     public string CurrentFirmwareVersion => string.IsNullOrWhiteSpace(SelectedDock?.FirmwareVersion) ? "Not reported by dock" : SelectedDock!.FirmwareVersion!;
     public string TargetFirmwareVersion => RecommendedPackage is null ? "Unknown" : _firmwareDownloadService.ResolveFirmwareVersion(RecommendedPackage);
+    public bool IsManualSelectionActive => SelectedManualPackage is not null;
+    public string ManualSelectionStatus => SelectedManualPackage is null
+        ? "Using detected dock model."
+        : $"Manual override: {SelectedManualPackage.PackageDisplayName}";
+    public string UpdateStatus => BuildUpdateStatus();
+    public string UpdateStatusDetail => BuildUpdateStatusDetail();
     public string RecommendedPackageNotes => RecommendedPackage?.Notes ?? "Refresh the catalog from HP or adjust the bundled source definitions for your exact dock models.";
     public string? DownloadUrl => RecommendedPackage is null ? null : _firmwareDownloadService.ResolveDownloadUrl(RecommendedPackage);
     public string FirmwareVersionSummary => BuildFirmwareVersionSummary();
@@ -180,24 +205,9 @@ public sealed class MainViewModel : ObservableObject
             StatusMessage = "Detecting connected HP docks...";
 
             UpdateCatalogState(await _catalogService.LoadAsync());
-            _lastSnapshot = await _dockDetectionService.CaptureSnapshotAsync();
-            var detected = _lastSnapshot.DetectedDocks;
-
-            Docks.Clear();
-            foreach (var dock in detected)
-            {
-                Docks.Add(dock);
-            }
-
-            DiagnosticCandidates.Clear();
-            foreach (var candidate in _lastSnapshot.Candidates)
-            {
-                DiagnosticCandidates.Add(candidate);
-            }
-
-            SelectedDock = Docks.FirstOrDefault();
-            RaisePropertyChanged(nameof(DiagnosticsSummary));
-            RaisePropertyChanged(nameof(DetectionAdvisory));
+            _postInstallVerificationSummary = null;
+            RaisePropertyChanged(nameof(UpdateStatusDetail));
+            await CaptureAndApplySnapshotAsync();
             StatusMessage = Docks.Count > 0
                 ? $"Detected {Docks.Count} HP dock device(s)."
                 : DiagnosticCandidates.Count > 0
@@ -227,14 +237,7 @@ public sealed class MainViewModel : ObservableObject
             var report = BuildDiagnosticsReport(_lastSnapshot);
             await File.WriteAllTextAsync(reportPath, report);
 
-            DiagnosticCandidates.Clear();
-            foreach (var candidate in _lastSnapshot.Candidates)
-            {
-                DiagnosticCandidates.Add(candidate);
-            }
-
-            RaisePropertyChanged(nameof(DiagnosticsSummary));
-            RaisePropertyChanged(nameof(DetectionAdvisory));
+            ApplySnapshot(_lastSnapshot, SelectedDock);
             StatusMessage = $"Diagnostics exported to {reportPath}";
             MessageBox.Show(
                 $"Diagnostics report written to:\n{reportPath}",
@@ -369,6 +372,8 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             IsBusy = true;
+            var previousDock = SelectedDock;
+            var previousFirmwareVersion = CurrentFirmwareVersion;
             StatusMessage = "Preparing firmware package...";
 
             var preparedInstallerPath = await _softPaqExtractionService.PrepareInstallerAsync(installerPath);
@@ -378,8 +383,19 @@ public sealed class MainViewModel : ObservableObject
             var logFile = _logService.CreateLogFilePath();
             var result = await _processRunnerService.RunInstallerAsync(preparedInstallerPath, InstallerArguments, logFile);
 
-            StatusMessage = result.Summary;
-            var detail = $"{result.Summary}\n\nCommand: {result.CommandLine}\nLog: {result.LogFilePath}";
+            string? verificationSummary = null;
+            if (result.Success)
+            {
+                StatusMessage = "Installer finished. Verifying dock firmware...";
+                verificationSummary = await VerifyFirmwareAfterInstallAsync(previousDock, previousFirmwareVersion);
+            }
+
+            StatusMessage = verificationSummary is null
+                ? result.Summary
+                : $"{result.Summary} {verificationSummary}";
+            var detail = verificationSummary is null
+                ? $"{result.Summary}\n\nCommand: {result.CommandLine}\nLog: {result.LogFilePath}"
+                : $"{result.Summary}\n{verificationSummary}\n\nCommand: {result.CommandLine}\nLog: {result.LogFilePath}";
             MessageBox.Show(
                 detail,
                 result.Success ? "Firmware install completed" : "Firmware install finished with warnings",
@@ -440,7 +456,45 @@ public sealed class MainViewModel : ObservableObject
     private void UpdateCatalogState(FirmwareCatalog catalog)
     {
         _catalog = catalog;
+        UpdateManualPackageOptions();
+        if (SelectedManualPackage is not null)
+        {
+            SelectedManualPackage = _catalog.Packages.FirstOrDefault(p => string.Equals(p.Id, SelectedManualPackage.Id, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            SyncRecommendedPackage();
+        }
         RaisePropertyChanged(nameof(CatalogSummary));
+    }
+
+    private async Task CaptureAndApplySnapshotAsync(DockDeviceInfo? preferredDock = null)
+    {
+        _lastSnapshot = await _dockDetectionService.CaptureSnapshotAsync();
+        ApplySnapshot(_lastSnapshot, preferredDock);
+    }
+
+    private void ApplySnapshot(DockDetectionSnapshot snapshot, DockDeviceInfo? preferredDock = null)
+    {
+        Docks.Clear();
+        foreach (var dock in snapshot.DetectedDocks)
+        {
+            Docks.Add(dock);
+        }
+
+        DiagnosticCandidates.Clear();
+        foreach (var candidate in snapshot.Candidates)
+        {
+            DiagnosticCandidates.Add(candidate);
+        }
+
+        var matchedDock = FindMatchingDock(snapshot.DetectedDocks, preferredDock) ?? snapshot.DetectedDocks.FirstOrDefault();
+        SelectedDock = matchedDock;
+        RaisePropertyChanged(nameof(DiagnosticsSummary));
+        RaisePropertyChanged(nameof(DetectionAdvisory));
+        RaisePropertyChanged(nameof(UpdateStatus));
+        RaisePropertyChanged(nameof(UpdateStatusDetail));
+        RaisePropertyChanged(nameof(FirmwareVersionSummary));
     }
 
     private bool ShouldAutomaticallyRefreshCatalog(FirmwareCatalog catalog)
@@ -464,6 +518,7 @@ public sealed class MainViewModel : ObservableObject
         ExportDiagnosticsCommand.NotifyCanExecuteChanged();
         DownloadPackageCommand.NotifyCanExecuteChanged();
         BrowseInstallerCommand.NotifyCanExecuteChanged();
+        ClearManualSelectionCommand.NotifyCanExecuteChanged();
         InstallCommand.NotifyCanExecuteChanged();
     }
 
@@ -480,6 +535,46 @@ public sealed class MainViewModel : ObservableObject
         }
 
         return package.InstallerFileName;
+    }
+
+    private async Task<string> VerifyFirmwareAfterInstallAsync(DockDeviceInfo previousDock, string previousFirmwareVersion)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        await CaptureAndApplySnapshotAsync(previousDock);
+
+        var currentDock = SelectedDock;
+        if (currentDock is null)
+        {
+            _postInstallVerificationSummary = "Post-install verification could not find the dock after the installer finished.";
+            RaisePropertyChanged(nameof(UpdateStatusDetail));
+            return _postInstallVerificationSummary;
+        }
+
+        var currentFirmwareVersion = CurrentFirmwareVersion;
+        var targetVersion = TargetFirmwareVersion;
+        _postInstallVerificationSummary = BuildPostInstallVerificationSummary(previousFirmwareVersion, currentFirmwareVersion, targetVersion);
+        RaisePropertyChanged(nameof(UpdateStatusDetail));
+        return _postInstallVerificationSummary;
+    }
+
+    private string BuildPostInstallVerificationSummary(string previousFirmwareVersion, string currentFirmwareVersion, string targetVersion)
+    {
+        if (currentFirmwareVersion.Equals("Not reported by dock", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Post-install verification could not read the dock firmware version.";
+        }
+
+        if (NormalizeVersion(currentFirmwareVersion).Equals(NormalizeVersion(targetVersion), StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Post-install verification confirmed firmware {currentFirmwareVersion}.";
+        }
+
+        if (!NormalizeVersion(previousFirmwareVersion).Equals(NormalizeVersion(currentFirmwareVersion), StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Post-install verification saw the dock change from {previousFirmwareVersion} to {currentFirmwareVersion}.";
+        }
+
+        return $"Post-install verification still reads firmware {currentFirmwareVersion}.";
     }
 
     private string BuildFirmwareVersionSummary()
@@ -509,9 +604,109 @@ public sealed class MainViewModel : ObservableObject
         return $"Current dock firmware: {current}. Target firmware from the selected package: {target}.";
     }
 
+    private string BuildUpdateStatus()
+    {
+        if (SelectedDock is null)
+        {
+            return "No dock selected";
+        }
+
+        if (RecommendedPackage is null)
+        {
+            return "No package match";
+        }
+
+        var current = CurrentFirmwareVersion;
+        var target = TargetFirmwareVersion;
+        if (current.Equals("Not reported by dock", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Unknown";
+        }
+
+        if (NormalizeVersion(current).Equals(NormalizeVersion(target), StringComparison.OrdinalIgnoreCase))
+        {
+            return "Up to date";
+        }
+
+        return "Update available";
+    }
+
+    private string BuildUpdateStatusDetail()
+    {
+        if (!string.IsNullOrWhiteSpace(_postInstallVerificationSummary))
+        {
+            return _postInstallVerificationSummary;
+        }
+
+        if (SelectedDock is null)
+        {
+            return "Select a detected dock to evaluate firmware status.";
+        }
+
+        if (RecommendedPackage is null)
+        {
+            return "No catalog package matched this dock yet.";
+        }
+
+        var current = CurrentFirmwareVersion;
+        var target = TargetFirmwareVersion;
+        if (current.Equals("Not reported by dock", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"The dock did not report its current firmware version. The selected package targets {target}.";
+        }
+
+        if (NormalizeVersion(current).Equals(NormalizeVersion(target), StringComparison.OrdinalIgnoreCase))
+        {
+            return $"The dock already reports firmware {current}, which matches the selected package.";
+        }
+
+        return $"The dock currently reports {current}. The selected package targets {target}.";
+    }
+
     private static string NormalizeVersion(string version)
     {
         return new string(version.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+    }
+
+    private void UpdateManualPackageOptions()
+    {
+        ManualPackageOptions.Clear();
+        foreach (var package in _catalog.Packages.OrderBy(p => p.PackageDisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            ManualPackageOptions.Add(package);
+        }
+        RaisePropertyChanged(nameof(ManualSelectionStatus));
+    }
+
+    private void SyncRecommendedPackage()
+    {
+        RecommendedPackage = SelectedManualPackage ?? _catalogService.MatchPackage(SelectedDock, _catalog);
+        if (RecommendedPackage is not null && string.IsNullOrWhiteSpace(InstallerPath))
+        {
+            AutoFillInstallerPath();
+        }
+    }
+
+    private void ClearManualSelection()
+    {
+        SelectedManualPackage = null;
+    }
+
+    private static DockDeviceInfo? FindMatchingDock(IReadOnlyList<DockDeviceInfo> docks, DockDeviceInfo? preferredDock)
+    {
+        if (preferredDock is null)
+        {
+            return null;
+        }
+
+        return docks.FirstOrDefault(d =>
+            (!string.IsNullOrWhiteSpace(preferredDock.DeviceInstanceId)
+             && string.Equals(d.DeviceInstanceId, preferredDock.DeviceInstanceId, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(preferredDock.ProductId)
+                && string.Equals(d.ProductId, preferredDock.ProductId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(d.DisplayName, preferredDock.DisplayName, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(preferredDock.SerialNumber)
+                && string.Equals(d.SerialNumber, preferredDock.SerialNumber, StringComparison.OrdinalIgnoreCase)));
     }
 
     private string BuildDiagnosticsReport(DockDetectionSnapshot snapshot)
