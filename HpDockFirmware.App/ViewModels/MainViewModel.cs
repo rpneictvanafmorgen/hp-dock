@@ -17,6 +17,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly DockDetectionService _dockDetectionService;
     private readonly FirmwareCatalogService _catalogService;
     private readonly HpCatalogRefreshService _catalogRefreshService;
+    private readonly FirmwareDownloadService _firmwareDownloadService;
+    private readonly SoftPaqExtractionService _softPaqExtractionService;
     private readonly ProcessRunnerService _processRunnerService;
     private readonly LogService _logService;
 
@@ -32,17 +34,22 @@ public sealed class MainViewModel : ObservableObject
         DockDetectionService dockDetectionService,
         FirmwareCatalogService catalogService,
         HpCatalogRefreshService catalogRefreshService,
+        FirmwareDownloadService firmwareDownloadService,
+        SoftPaqExtractionService softPaqExtractionService,
         ProcessRunnerService processRunnerService,
         LogService logService)
     {
         _dockDetectionService = dockDetectionService;
         _catalogService = catalogService;
         _catalogRefreshService = catalogRefreshService;
+        _firmwareDownloadService = firmwareDownloadService;
+        _softPaqExtractionService = softPaqExtractionService;
         _processRunnerService = processRunnerService;
         _logService = logService;
 
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
         ExportDiagnosticsCommand = new AsyncRelayCommand(ExportDiagnosticsAsync, () => !IsBusy);
+        DownloadPackageCommand = new AsyncRelayCommand(DownloadPackageAsync, CanDownloadPackage);
         BrowseInstallerCommand = new RelayCommand(BrowseInstaller, () => !IsBusy);
         InstallCommand = new AsyncRelayCommand(InstallAsync, CanInstall);
         OpenLogDirectoryCommand = new RelayCommand(OpenLogDirectory);
@@ -53,6 +60,7 @@ public sealed class MainViewModel : ObservableObject
 
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand ExportDiagnosticsCommand { get; }
+    public AsyncRelayCommand DownloadPackageCommand { get; }
     public RelayCommand BrowseInstallerCommand { get; }
     public AsyncRelayCommand InstallCommand { get; }
     public RelayCommand OpenLogDirectoryCommand { get; }
@@ -69,6 +77,8 @@ public sealed class MainViewModel : ObservableObject
                 {
                     AutoFillInstallerPath();
                 }
+
+                RaisePropertyChanged(nameof(InstallHelpText));
             }
         }
     }
@@ -85,6 +95,7 @@ public sealed class MainViewModel : ObservableObject
                 RaisePropertyChanged(nameof(RecommendedPackageNotes));
                 RaisePropertyChanged(nameof(DownloadUrl));
                 RaisePropertyChanged(nameof(InstallerArguments));
+                RaisePropertyChanged(nameof(InstallHelpText));
                 NotifyCommands();
             }
         }
@@ -97,6 +108,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (SetProperty(ref _installerPath, value))
             {
+                RaisePropertyChanged(nameof(InstallHelpText));
                 NotifyCommands();
             }
         }
@@ -106,7 +118,14 @@ public sealed class MainViewModel : ObservableObject
     public string RecommendedPackageName => RecommendedPackage?.PackageDisplayName ?? "No catalog match";
     public string RecommendedPackageVersion => RecommendedPackage?.Version ?? "Unknown";
     public string RecommendedPackageNotes => RecommendedPackage?.Notes ?? "Refresh the catalog from HP or adjust the bundled source definitions for your exact dock models.";
-    public string? DownloadUrl => RecommendedPackage?.DownloadUrl;
+    public string? DownloadUrl => RecommendedPackage is null ? null : _firmwareDownloadService.ResolveDownloadUrl(RecommendedPackage);
+    public string InstallHelpText => SelectedDock is null
+        ? "Select a detected dock first."
+        : string.IsNullOrWhiteSpace(InstallerPath)
+            ? "Browse to the HP updater .exe, or download the mapped package first."
+            : File.Exists(InstallerPath)
+                ? "Ready to run the HP updater."
+                : "The selected installer path does not exist.";
     public string CatalogSummary => _catalog.GeneratedAtUtc is null
         ? $"Using bundled catalog: {_catalogService.GetBundledCatalogPath()}"
         : $"Catalog updated {_catalog.GeneratedAtUtc:yyyy-MM-dd HH:mm} UTC from {_catalog.GeneratedFrom}";
@@ -281,6 +300,40 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private async Task DownloadPackageAsync()
+    {
+        if (RecommendedPackage is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            StatusMessage = "Downloading firmware package...";
+
+            var resolvedUrl = _firmwareDownloadService.ResolveDownloadUrl(RecommendedPackage);
+            if (string.IsNullOrWhiteSpace(resolvedUrl))
+            {
+                throw new InvalidOperationException("No downloadable package URL is available for this dock.");
+            }
+
+            var fileName = GetPackageFileName(RecommendedPackage, resolvedUrl);
+            var downloadedPath = await _firmwareDownloadService.DownloadAsync(resolvedUrl, fileName);
+            InstallerPath = downloadedPath;
+            StatusMessage = $"Firmware package downloaded to {downloadedPath}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Download failed: {ex.Message}";
+            MessageBox.Show(ex.Message, "Download error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private async Task InstallAsync()
     {
         if (SelectedDock is null || string.IsNullOrWhiteSpace(InstallerPath))
@@ -309,10 +362,14 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             IsBusy = true;
+            StatusMessage = "Preparing firmware package...";
+
+            var preparedInstallerPath = await _softPaqExtractionService.PrepareInstallerAsync(installerPath);
+
             StatusMessage = "Running HP firmware installer...";
 
             var logFile = _logService.CreateLogFilePath();
-            var result = await _processRunnerService.RunInstallerAsync(installerPath, InstallerArguments, logFile);
+            var result = await _processRunnerService.RunInstallerAsync(preparedInstallerPath, InstallerArguments, logFile);
 
             StatusMessage = result.Summary;
             var detail = $"{result.Summary}\n\nCommand: {result.CommandLine}\nLog: {result.LogFilePath}";
@@ -336,7 +393,14 @@ public sealed class MainViewModel : ObservableObject
     private bool CanInstall() =>
         !IsBusy
         && SelectedDock is not null
-        && !string.IsNullOrWhiteSpace(InstallerPath);
+        && !string.IsNullOrWhiteSpace(InstallerPath)
+        && File.Exists(InstallerPath);
+
+    private bool CanDownloadPackage() =>
+        !IsBusy
+        && SelectedDock is not null
+        && RecommendedPackage is not null
+        && !string.IsNullOrWhiteSpace(_firmwareDownloadService.ResolveDownloadUrl(RecommendedPackage));
 
     private void AutoFillInstallerPath()
     {
@@ -391,8 +455,24 @@ public sealed class MainViewModel : ObservableObject
     {
         RefreshCommand.NotifyCanExecuteChanged();
         ExportDiagnosticsCommand.NotifyCanExecuteChanged();
+        DownloadPackageCommand.NotifyCanExecuteChanged();
         BrowseInstallerCommand.NotifyCanExecuteChanged();
         InstallCommand.NotifyCanExecuteChanged();
+    }
+
+    private static string GetPackageFileName(FirmwarePackageInfo package, string? resolvedUrl = null)
+    {
+        var url = resolvedUrl ?? package.DownloadUrl;
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var fileName = Path.GetFileName(uri.LocalPath);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                return fileName;
+            }
+        }
+
+        return package.InstallerFileName;
     }
 
     private string BuildDiagnosticsReport(DockDetectionSnapshot snapshot)

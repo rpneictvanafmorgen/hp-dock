@@ -40,6 +40,8 @@ public partial class App : Application
                 new DockDetectionService(),
                 new FirmwareCatalogService(AppContext.BaseDirectory),
                 new HpCatalogRefreshService(AppContext.BaseDirectory),
+                new FirmwareDownloadService(),
+                new SoftPaqExtractionService(),
                 new ProcessRunnerService(),
                 new LogService());
 
