@@ -5,7 +5,7 @@
       "dockModel": "HP Thunderbolt Dock G4",
       "productId": "0488",
       "detectPattern": "Thunderbolt Dock G4",
-      "version": "Keep in sync with the HP SoftPaq you stage locally",
+      "version": "1.0.25.0",
       "packageDisplayName": "HP Thunderbolt Dock G4 Firmware",
       "installerFileName": "HPFirmwareInstaller.exe",
       "installerArguments": "",

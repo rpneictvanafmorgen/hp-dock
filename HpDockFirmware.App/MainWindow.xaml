@@ -187,6 +187,8 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
@@ -195,10 +197,14 @@
                     <TextBlock Grid.Row="1" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Package" />
                     <TextBlock Grid.Row="2" FontSize="18" FontWeight="SemiBold" Text="{Binding RecommendedPackageName}" TextWrapping="Wrap" />
 
-                    <UniformGrid Grid.Row="3" Margin="0,10,0,0" Columns="2">
+                    <UniformGrid Grid.Row="3" Margin="0,10,0,0" Columns="3">
                         <StackPanel Margin="0,0,10,0">
-                            <TextBlock Foreground="{StaticResource MutedBrush}" Text="Catalog Version" />
-                            <TextBlock Text="{Binding RecommendedPackageVersion}" TextWrapping="Wrap" />
+                            <TextBlock Foreground="{StaticResource MutedBrush}" Text="Current Firmware" />
+                            <TextBlock Text="{Binding CurrentFirmwareVersion}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Foreground="{StaticResource MutedBrush}" Text="Target Firmware" />
+                            <TextBlock FontWeight="SemiBold" Text="{Binding TargetFirmwareVersion}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Foreground="{StaticResource MutedBrush}" Text="Installer Arguments" />
@@ -206,16 +212,19 @@
                         </StackPanel>
                     </UniformGrid>
 
-                    <TextBlock Grid.Row="4" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Notes" />
-                    <TextBlock Grid.Row="5" Text="{Binding RecommendedPackageNotes}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="4" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Catalog Package Version" />
+                    <TextBlock Grid.Row="5" Text="{Binding RecommendedPackageVersion}" TextWrapping="Wrap" />
 
-                    <TextBlock Grid.Row="6" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="HP Download URL" />
-                    <TextBlock Grid.Row="7" Text="{Binding DownloadUrl}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="6" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Notes" />
+                    <TextBlock Grid.Row="7" Text="{Binding RecommendedPackageNotes}" TextWrapping="Wrap" />
 
-                    <TextBlock Grid.Row="8" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Catalog Source" />
-                    <TextBlock Grid.Row="9" Text="{Binding CatalogSummary}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="8" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="HP Download URL" />
+                    <TextBlock Grid.Row="9" Text="{Binding DownloadUrl}" TextWrapping="Wrap" />
 
-                    <Border Grid.Row="10"
+                    <TextBlock Grid.Row="10" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" Text="Catalog Source" />
+                    <TextBlock Grid.Row="11" Text="{Binding CatalogSummary}" TextWrapping="Wrap" />
+
+                    <Border Grid.Row="12"
                             Margin="0,14,0,0"
                             Padding="14"
                             CornerRadius="14"

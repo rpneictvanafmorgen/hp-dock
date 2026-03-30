@@ -78,6 +78,8 @@ public sealed class MainViewModel : ObservableObject
                     AutoFillInstallerPath();
                 }
 
+                RaisePropertyChanged(nameof(CurrentFirmwareVersion));
+                RaisePropertyChanged(nameof(FirmwareVersionSummary));
                 RaisePropertyChanged(nameof(InstallHelpText));
             }
         }
@@ -92,9 +94,11 @@ public sealed class MainViewModel : ObservableObject
             {
                 RaisePropertyChanged(nameof(RecommendedPackageName));
                 RaisePropertyChanged(nameof(RecommendedPackageVersion));
+                RaisePropertyChanged(nameof(TargetFirmwareVersion));
                 RaisePropertyChanged(nameof(RecommendedPackageNotes));
                 RaisePropertyChanged(nameof(DownloadUrl));
                 RaisePropertyChanged(nameof(InstallerArguments));
+                RaisePropertyChanged(nameof(FirmwareVersionSummary));
                 RaisePropertyChanged(nameof(InstallHelpText));
                 NotifyCommands();
             }
@@ -117,8 +121,11 @@ public sealed class MainViewModel : ObservableObject
     public string InstallerArguments => RecommendedPackage?.InstallerArguments ?? string.Empty;
     public string RecommendedPackageName => RecommendedPackage?.PackageDisplayName ?? "No catalog match";
     public string RecommendedPackageVersion => RecommendedPackage?.Version ?? "Unknown";
+    public string CurrentFirmwareVersion => string.IsNullOrWhiteSpace(SelectedDock?.FirmwareVersion) ? "Not reported by dock" : SelectedDock!.FirmwareVersion!;
+    public string TargetFirmwareVersion => RecommendedPackage is null ? "Unknown" : _firmwareDownloadService.ResolveFirmwareVersion(RecommendedPackage);
     public string RecommendedPackageNotes => RecommendedPackage?.Notes ?? "Refresh the catalog from HP or adjust the bundled source definitions for your exact dock models.";
     public string? DownloadUrl => RecommendedPackage is null ? null : _firmwareDownloadService.ResolveDownloadUrl(RecommendedPackage);
+    public string FirmwareVersionSummary => BuildFirmwareVersionSummary();
     public string InstallHelpText => SelectedDock is null
         ? "Select a detected dock first."
         : string.IsNullOrWhiteSpace(InstallerPath)
@@ -473,6 +480,38 @@ public sealed class MainViewModel : ObservableObject
         }
 
         return package.InstallerFileName;
+    }
+
+    private string BuildFirmwareVersionSummary()
+    {
+        if (SelectedDock is null)
+        {
+            return "Select a detected dock to compare installed and target firmware.";
+        }
+
+        if (RecommendedPackage is null)
+        {
+            return "No catalog package matched this dock, so there is no target firmware version to compare.";
+        }
+
+        var current = CurrentFirmwareVersion;
+        var target = TargetFirmwareVersion;
+        if (current.Equals("Not reported by dock", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Target firmware from the selected HP package: {target}. The dock did not report its current firmware version.";
+        }
+
+        if (NormalizeVersion(current).Equals(NormalizeVersion(target), StringComparison.OrdinalIgnoreCase))
+        {
+            return $"The dock already reports the same firmware version as the selected package: {target}.";
+        }
+
+        return $"Current dock firmware: {current}. Target firmware from the selected package: {target}.";
+    }
+
+    private static string NormalizeVersion(string version)
+    {
+        return new string(version.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
     }
 
     private string BuildDiagnosticsReport(DockDetectionSnapshot snapshot)
